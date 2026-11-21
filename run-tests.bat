@@ -3,15 +3,12 @@ REM Compiles everything and runs every test suite.
 cd /d "%~dp0"
 if exist out rmdir /s /q out
 mkdir out
-dir /s /b src\*.java > sources.txt
-javac -d out -cp "lib/*" @sources.txt
+javac -d out -cp "lib/*" src\Main.java src\model\*.java src\policy\*.java src\engine\*.java src\events\*.java src\exceptions\*.java src\data\*.java src\report\*.java src\gui\*.java src\experiment\*.java src\test\*.java
 if errorlevel 1 (
-    del sources.txt
     echo Compilation failed.
     pause
     exit /b 1
 )
-del sources.txt
 set FAILED=0
 for %%T in (SchedulerTest SimulationTest DataTest ConcurrencyTest) do (
     java -cp "out;lib/*" test.%%T

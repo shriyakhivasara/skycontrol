@@ -3,8 +3,6 @@ REM Runs the FCFS vs priority policy experiment and saves data\exports\experimen
 cd /d "%~dp0"
 if exist out rmdir /s /q out
 mkdir out
-dir /s /b src\*.java > sources.txt
-javac -d out -cp "lib/*" @sources.txt
-del sources.txt
+javac -d out -cp "lib/*" src\Main.java src\model\*.java src\policy\*.java src\engine\*.java src\events\*.java src\exceptions\*.java src\data\*.java src\report\*.java src\gui\*.java src\experiment\*.java src\test\*.java
 java -cp "out;lib/*" experiment.PolicyExperiment %*
 pause
