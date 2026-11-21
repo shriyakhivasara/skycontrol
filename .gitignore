@@ -1,0 +1,8 @@
+out/
+data/*.db
+data/exports/
+*.class
+.idea/
+*.iml
+.vscode/
+.DS_Store
