@@ -6,11 +6,13 @@ public enum FlightStatus {
     APPROACHING,          // on radar, flying towards the airport
     HOLDING,              // arrived, circling until a runway slot is free
     LANDED,               // on the ground, looking for a gate
-    REMOTE_STAND,         // parked away from the terminal because no gate was free
+    REMOTE_STAND,         // parked away from the terminal (no gate free); passengers go by bus
     AT_GATE,              // at the gate, being turned around
+    BOARDING,             // a departure whose aircraft is being turned around
     READY_FOR_DEPARTURE,  // pushed back, waiting for a take-off slot
     DEPARTED,
-    DIVERTED;             // sent to another airport
+    DIVERTED,             // sent to another airport
+    CANCELLED;            // a departure whose inbound aircraft diverted
 
     /** True while the aircraft is in the air near the airport and burning fuel. */
     public boolean isAirborne() {
@@ -19,6 +21,6 @@ public enum FlightStatus {
 
     /** True once the flight is finished as far as this airport is concerned. */
     public boolean isFinished() {
-        return this == DEPARTED || this == DIVERTED;
+        return this == DEPARTED || this == DIVERTED || this == CANCELLED;
     }
 }

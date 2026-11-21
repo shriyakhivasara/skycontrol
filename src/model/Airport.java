@@ -16,15 +16,15 @@ public class Airport {
         this.name = name;
     }
 
-    /** The default airport used in the simulation: 2 runways, 6 normal and 4 large gates. */
+    /** The default airport used in the simulation: 2 runways, 8 normal and 6 large gates. */
     public static Airport createDefault() {
         Airport a = new Airport("DXB", "Dubai International (simulated)");
         a.addRunway(new Runway("12L"));
         a.addRunway(new Runway("12R"));
-        for (int i = 1; i <= 6; i++) {
+        for (int i = 1; i <= 8; i++) {
             a.addGate(new Gate("B" + i, GateSize.NORMAL));
         }
-        for (int i = 1; i <= 4; i++) {
+        for (int i = 1; i <= 6; i++) {
             a.addGate(new Gate("A" + i, GateSize.LARGE));
         }
         return a;
