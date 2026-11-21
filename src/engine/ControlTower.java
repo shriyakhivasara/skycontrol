@@ -240,6 +240,7 @@ public class ControlTower {
         }
         gates.release(arrival);
         arrival.setStatus(FlightStatus.LANDED);   // this arrival is now complete
+        record(arrival, "turnaround done, left " + arrival.getGateId());
         if (dep != null) {
             scheduler.requestTakeoff(dep, now);
             record(dep, "pushed back from " + arrival.getGateId() + ", waiting to take off");
