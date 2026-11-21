@@ -81,8 +81,10 @@ public class SimulationTest {
         c.equal(FlightStatus.BOARDING, d.getStatus(), "its departure starts boarding");
         runTo(t, 84);
         c.equal(FlightStatus.AT_GATE, a.getStatus(), "still at the gate during turnaround");
-        runTo(t, 90);
-        c.equal(FlightStatus.LANDED, a.getStatus(), "after turnaround the arrival is complete");
+        runTo(t, 99);
+        c.equal(FlightStatus.AT_GATE, a.getStatus(), "turnaround done at 85 but it waits for its 100 departure slot");
+        runTo(t, 100);
+        c.equal(FlightStatus.LANDED, a.getStatus(), "at departure time the arrival is complete");
         c.equal(FlightStatus.DEPARTED, d.getStatus(), "and the departure has taken off");
         c.equal(0, d.delayMinutes(), "departure left on time");
         c.that(t.allFinished(), "simulation reports every flight finished");
@@ -97,8 +99,10 @@ public class SimulationTest {
         t.addFlight(a, d);
         runTo(t, 120);
         c.equal(FlightStatus.AT_GATE, a.getStatus(), "aircraft ready early waits at the gate for its departure time");
-        runTo(t, 191);
-        c.equal(FlightStatus.DEPARTED, d.getStatus(), "it pushes back up to 10 min early and leaves");
+        runTo(t, 199);
+        c.that(d.getStatus() != FlightStatus.DEPARTED, "it does not leave before its scheduled time");
+        runTo(t, 200);
+        c.equal(FlightStatus.DEPARTED, d.getStatus(), "it leaves at its scheduled time");
     }
 
     static void gateAllocation(Check c) throws Exception {

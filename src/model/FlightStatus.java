@@ -14,6 +14,24 @@ public enum FlightStatus {
     DIVERTED,             // sent to another airport
     CANCELLED;            // a departure whose inbound aircraft diverted
 
+    /** Text shown on the flight boards. */
+    public String label() {
+        switch (this) {
+            case SCHEDULED: return "Scheduled";
+            case APPROACHING: return "On approach";
+            case HOLDING: return "Holding";
+            case LANDED: return "Landed";
+            case REMOTE_STAND: return "Remote stand";
+            case AT_GATE: return "At gate";
+            case BOARDING: return "Boarding";
+            case READY_FOR_DEPARTURE: return "Taxiing";
+            case DEPARTED: return "Departed";
+            case DIVERTED: return "Diverted";
+            case CANCELLED: return "Cancelled";
+            default: return name();
+        }
+    }
+
     /** True while the aircraft is in the air near the airport and burning fuel. */
     public boolean isAirborne() {
         return this == APPROACHING || this == HOLDING;

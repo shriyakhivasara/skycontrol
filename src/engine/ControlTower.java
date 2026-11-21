@@ -42,8 +42,8 @@ import report.Statistics;
  */
 public class ControlTower {
     private static final int LOG_SIZE = 300;
-    /** A departure may push back at most this many minutes before its scheduled time. */
-    public static final int EARLY_PUSHBACK_MINUTES = 10;
+    /** A departure may push back this many minutes before its scheduled time (0 = not early). */
+    public static final int EARLY_PUSHBACK_MINUTES = 0;
 
     private final Airport airport;
     private final RunwayScheduler scheduler;
