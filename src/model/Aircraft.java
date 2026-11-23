@@ -33,6 +33,12 @@ public abstract class Aircraft {
     /** Short category name shown on screens, e.g. "Widebody". */
     public abstract String category();
 
+    /** Every model code that Aircraft.of() accepts, for drop-down lists. */
+    public static String[] knownModels() {
+        return new String[]{"A320", "A321", "B737", "B738", "A330", "A350", "A380", "B777", "B787",
+                "B747F", "B777F", "G650", "CL350", "E50P"};
+    }
+
     /**
      * Factory: builds the right subclass from a model code such as "A380" or "B737".
      * Used when reading the flight schedule.

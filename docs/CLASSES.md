@@ -37,9 +37,10 @@ Every class in SkyControl, grouped by folder (package), with what it does and th
 
 | Class | What it does | OOP concept |
 |---|---|---|
-| `ControlTower` | Runs the simulation one minute at a time (`tick()`), applies events, logs everything and produces snapshots | Composition, `synchronized`, observer subject |
+| `ControlTower` | Runs the simulation one minute at a time (`tick()`), applies events, logs everything and produces snapshots. In manual mode it waits for the user: `clearFlight()`, `sendToBackOfQueue()`, `divertByController()`, `moveToGate()`, `fileFlightPlan()` | Composition, `synchronized`, observer subject |
+| `ControllerScore` | Points for the user in manual mode: on time +10, late +4, emergency +15, unsafe -25, diversion -50 | Encapsulation, constants |
 | `RunwayScheduler` | The runway queue (a `PriorityQueue`). Each minute clears the flight at the front onto the runway that can take it soonest. Policy can be swapped live. | Collections, Strategy, thread safety |
-| `GateAllocator` | Gives each landed aircraft the smallest free gate that fits; throws `GateUnavailableException` if none | `EnumMap`, `HashMap`, custom exception |
+| `GateAllocator` | Gives each landed aircraft the smallest free gate that fits; throws `GateUnavailableException` if none. `assignTo()` moves an aircraft to a gate the user picks | `EnumMap`, `HashMap`, custom exception |
 | `SimClock` | Background thread that calls `tick()` at the chosen speed; pause, resume, stop | `Runnable`, `Thread`, `volatile` |
 | `TrafficGenerator` | Adds unscheduled private jets and freighters using a seeded `Random` | Reproducible randomness |
 | `FlightListener` | Interface for anything that wants to hear about flight events | Interface, Observer pattern |
@@ -62,10 +63,11 @@ Every class in SkyControl, grouped by folder (package), with what it does and th
 | Class | Thrown when | Result |
 |---|---|---|
 | `SkyControlException` | Parent of all the others | Catch one type for any SkyControl error |
+| `SeparationViolationException` | In manual mode, the user clears an aircraft too soon behind the previous one | Clearance refused, message says when it becomes safe, -25 points |
 | `RunwayClosedException` | A flight is cleared onto, or someone closes, a closed runway | Message on screen |
-| `GateUnavailableException` | No free gate is big enough | Aircraft goes to a remote stand (+15 min turnaround) |
+| `GateUnavailableException` | No free gate is big enough, or the user picks a gate that is taken or too small (built with two factory methods) | Aircraft goes to a remote stand (+15 min turnaround), or a red message |
 | `InsufficientFuelException` | A circling flight reaches its fuel reserve | Flight diverts to Abu Dhabi; its departure is cancelled |
-| `InvalidFlightPlanException` | Bad flight number, unknown aircraft, too little fuel, departure before arrival, bad CSV line | Schedule refuses to load, naming the line |
+| `InvalidFlightPlanException` | Bad flight number, unknown aircraft, too little fuel, departure before arrival or before turnaround ends, time in the past, duplicate number, bad CSV line | Schedule refuses to load (naming the line) or the flight plan form shows the problem |
 | `InvalidEventException` | MAYDAY for a flight on the ground, unknown runway, reopening an open runway... | Message on screen |
 | `StorageException` | The database cannot be opened, read or written | App falls back to memory |
 
@@ -92,12 +94,17 @@ Every class in SkyControl, grouped by folder (package), with what it does and th
 
 | Class | What it does | OOP concept |
 |---|---|---|
-| `MainWindow` | Lays out all panels; a Swing `Timer` refreshes them 4 times a second from one snapshot | `JFrame`, composition |
+| `MainWindow` | Lays out all panels, the menu bar (File, Flights, Control, Help) and the Auto/Manual switch; a Swing `Timer` refreshes everything 4 times a second from one snapshot | `JFrame`, `JMenuBar`, composition |
+| `FlightDetailsDialog` | Live details of one flight with action buttons that enable only when they make sense | `JDialog`, `Refreshable` |
+| `FlightPlanDialog` | Form to file a new flight, with validation shown in red | Modal `JDialog`, input validation |
+| `ReportDialogs` | File choosers for opening a schedule and exporting reports | `JFileChooser`, file handling |
+| `StatusLine` | One-line green/red message showing the result of the user's last action | `extends JLabel` |
+| `TowerAction` | Functional interface: one user action that may throw a SkyControl exception | Functional interface, lambdas |
 | `Refreshable` | Interface every live panel implements | Interface, polymorphism |
-| `RadarPanel` | Draws the radar with Java 2D | Custom painting, `extends JPanel` |
-| `FlightBoardPanel` | Arrivals or departures board | `JTable`, custom cell renderer |
-| `FlightTableModel` | Table data for a board | `extends AbstractTableModel` |
-| `GroundPanel` | Runway cards, queue table, gate tiles | Swing layouts |
+| `RadarPanel` | Draws the radar with Java 2D; clicking a plane opens its details | Custom painting, mouse events |
+| `FlightBoardPanel` | Arrivals or departures board with search box and status filter; double-click opens details | `JTable`, custom cell renderer, listeners |
+| `FlightTableModel` | Table data for a board, with filtering | `extends AbstractTableModel` |
+| `GroundPanel` | Runway cards, queue table with clearance buttons, clickable gate tiles | Swing layouts, event handling |
 | `StatsPanel` | Statistic tiles, hourly bar chart, saved runs | Custom painting, JDBC read |
 | `ControlPanel` | MAYDAY, runway, storm and export buttons; shows exception messages | Event handling |
 | `LogPanel` | The tower log | Swing |
@@ -117,6 +124,7 @@ Every class in SkyControl, grouped by folder (package), with what it does and th
 | `Check` | Tiny test helper: counts passes and failures |
 | `SchedulerTest` | Model, separation and scheduler tests (57 checks) |
 | `SimulationTest` | Full simulation and event tests (65 checks) |
+| `ControllerTest` | Manual control, clearances, score and controller actions (45 checks) |
 | `DataTest` | Loader, storage, background writer and export tests (42 checks) |
 | `ConcurrencyTest` | Multi-thread stress test, clock thread, experiment repeatability (12 checks) |
 | `ConsoleDemo` | Prints the runway scheduler at work, no GUI needed |

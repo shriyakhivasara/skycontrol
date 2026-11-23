@@ -7,6 +7,7 @@ import exceptions.InsufficientFuelException;
 import exceptions.InvalidEventException;
 import exceptions.InvalidFlightPlanException;
 import exceptions.RunwayClosedException;
+import exceptions.SeparationViolationException;
 import exceptions.SkyControlException;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import model.FlightStatus;
 import model.Gate;
 import model.Priority;
 import model.Runway;
+import model.SimTime;
 import policy.SchedulingPolicy;
 import report.Statistics;
 
@@ -34,7 +36,8 @@ import report.Statistics;
  *   <li>adds any extra traffic from the TrafficGenerator,</li>
  *   <li>moves flights along: onto radar, into the holding queue, burning fuel,
  *       and out of the gate when their turnaround is done,</li>
- *   <li>asks the RunwayScheduler who may land or take off now,</li>
+ *   <li>asks the RunwayScheduler who may land or take off now (in automatic mode; in
+ *       manual mode the user clears each flight with clearFlight()),</li>
  *   <li>parks landed aircraft at a gate (or a remote stand).</li>
  * </ol>
  * Every public method is synchronized: the clock thread, the screens and event buttons
@@ -53,6 +56,8 @@ public class ControlTower {
     private final Map<String, Integer> reopenAt = new HashMap<>();   // runway name -> minute
     private final Deque<LogEntry> log = new ArrayDeque<>();
     private final List<FlightListener> listeners = new CopyOnWriteArrayList<>();
+    private final ControllerScore score = new ControllerScore();
+    private boolean manualMode = false;
     private int minute = -1;
 
     public ControlTower(Airport airport, SchedulingPolicy policy, TrafficGenerator generator) {
@@ -117,13 +122,23 @@ public class ControlTower {
             }
         }
 
-        for (Clearance c : scheduler.assignSlots(now)) {
-            if (c.flight.isArrival()) {
-                land(c.flight, c.runway, now);
-            } else {
-                c.flight.setStatus(FlightStatus.DEPARTED);
-                record(c.flight, "took off from " + c.runway.getName() + delayText(c.flight));
+        if (!manualMode) {
+            for (Clearance c : scheduler.assignSlots(now)) {
+                complete(c.flight, c.runway, now, false);
             }
+        }
+    }
+
+    /** Finishes a landing or take-off that has just been cleared. */
+    private void complete(Flight f, Runway runway, int now, boolean byController) {
+        if (f.isArrival()) {
+            land(f, runway, now);
+        } else {
+            f.setStatus(FlightStatus.DEPARTED);
+            record(f, "took off from " + runway.getName() + delayText(f));
+        }
+        if (byController) {
+            score.movement(f.delayMinutes(), f.getPriority() == Priority.EMERGENCY);
         }
     }
 
@@ -195,6 +210,9 @@ public class ControlTower {
     }
 
     private void divert(Flight f, String reason) {
+        if (manualMode) {
+            score.diversion();
+        }
         scheduler.remove(f);
         f.setStatus(FlightStatus.DIVERTED);
         record(f, reason + " to AUH");
@@ -303,6 +321,114 @@ public class ControlTower {
         reopenAt.remove(r.getName());
     }
 
+    // =====================================================================
+    // Manual control: the user is the controller
+    // =====================================================================
+
+    /** In manual mode nothing lands or takes off unless the user clears it. */
+    public synchronized void setManualMode(boolean manual) {
+        if (manual == manualMode) {
+            return;
+        }
+        manualMode = manual;
+        record(null, manual ? "MANUAL control: you now clear every landing and take-off"
+                : "AUTOMATIC control: the scheduler clears flights again");
+    }
+
+    /**
+     * The controller clears a waiting flight to land or take off on a runway, right now.
+     * @throws InvalidEventException       if the flight is not waiting for a runway, or names are unknown
+     * @throws RunwayClosedException       if the runway is closed
+     * @throws SeparationViolationException if it is too soon after the previous aircraft (costs points)
+     */
+    public synchronized void clearFlight(String flightNumber, String runwayName) throws SkyControlException {
+        Flight f = requireFlight(flightNumber);
+        if (!scheduler.contains(f)) {
+            throw new InvalidEventException(f.getFlightNumber() + " is not waiting for a runway ("
+                    + f.getStatus().label() + ")");
+        }
+        Runway r = requireRunway(runwayName);
+        if (!r.isOpen()) {
+            throw new RunwayClosedException(r.getName());
+        }
+        int now = Math.max(0, minute);
+        int safeFrom = r.earliestTimeFor(f.getAircraft());
+        if (safeFrom > now) {
+            score.violation();
+            record(f, "UNSAFE clearance on " + r.getName() + " refused, safe from " + SimTime.format(safeFrom));
+            throw new SeparationViolationException(f.getFlightNumber(), f.getAircraft().getModel(), r.getName(),
+                    r.getLastFlight(), safeFrom);
+        }
+        r.clear(f, now);
+        scheduler.remove(f);
+        f.setRunwayName(r.getName());
+        f.setActualTime(now);
+        complete(f, r, now, true);
+    }
+
+    /** Puts a waiting flight at the back of the queue (it asks again from now). */
+    public synchronized void sendToBackOfQueue(String flightNumber) throws InvalidEventException {
+        Flight f = requireFlight(flightNumber);
+        if (!scheduler.contains(f)) {
+            throw new InvalidEventException(f.getFlightNumber() + " is not in the runway queue");
+        }
+        scheduler.remove(f);
+        int now = Math.max(0, minute);
+        if (f.isArrival()) {
+            scheduler.requestLanding(f, now);
+        } else {
+            scheduler.requestTakeoff(f, now);
+        }
+        record(f, "sent to the back of the queue by the controller");
+    }
+
+    /** The controller sends an airborne arrival to another airport. */
+    public synchronized void divertByController(String flightNumber) throws InvalidEventException {
+        Flight f = requireFlight(flightNumber);
+        if (!f.isArrival() || !f.getStatus().isAirborne()) {
+            throw new InvalidEventException("Only a flight in the air can divert (" + f.getFlightNumber()
+                    + " is " + f.getStatus().label() + ")");
+        }
+        divert(f, "diverted by the controller");
+    }
+
+    /**
+     * Moves a parked aircraft to a gate the controller picks, e.g. from a remote stand to a gate
+     * that has just become free (passengers no longer need a bus).
+     */
+    public synchronized void moveToGate(String flightNumber, String gateId) throws SkyControlException {
+        Flight f = requireFlight(flightNumber);
+        if (!f.isArrival() || (f.getStatus() != FlightStatus.AT_GATE && f.getStatus() != FlightStatus.REMOTE_STAND)) {
+            throw new InvalidEventException(f.getFlightNumber() + " is not parked (" + f.getStatus().label() + ")");
+        }
+        String from = f.getGateId();
+        Gate g = gates.assignTo(f, gateId);
+        f.setStatus(FlightStatus.AT_GATE);
+        Flight dep = f.getLinkedDeparture();
+        if (dep != null) {
+            dep.setGateId(g.getId());
+        }
+        record(f, "moved from " + from + " to gate " + g.getId());
+    }
+
+    /**
+     * Adds a flight typed in by the user. Same checks as the schedule file, plus the arrival
+     * must still be in the future.
+     */
+    public synchronized void fileFlightPlan(Flight arrival, Flight departure) throws InvalidFlightPlanException {
+        int now = Math.max(0, minute);
+        if (arrival.getScheduledTime() <= now) {
+            throw new InvalidFlightPlanException("arrival time " + SimTime.format(arrival.getScheduledTime())
+                    + " has already passed (it is " + SimTime.format(now) + ")");
+        }
+        addFlight(arrival, departure);
+        record(arrival, "flight plan filed by the controller, due " + SimTime.format(arrival.getScheduledTime())
+                + (departure == null ? "" : ", returns as " + departure.getFlightNumber()));
+    }
+
+    public synchronized boolean isManualMode() { return manualMode; }
+    public synchronized ControllerScore getScore() { return score; }
+
     public synchronized void setPolicy(SchedulingPolicy policy) {
         scheduler.setPolicy(policy);
         record(null, "Scheduling policy changed to " + policy.displayName());
@@ -362,7 +488,7 @@ public class ControlTower {
         }
         SchedulingPolicy p = scheduler.getPolicy();
         return new TowerSnapshot(minute, p.code(), p.displayName(), fs, rs, gs, q,
-                new ArrayList<>(log), statistics());
+                new ArrayList<>(log), statistics(), manualMode, score.getPoints(), score.toString());
     }
 
     public synchronized Statistics statistics() {

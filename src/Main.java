@@ -7,9 +7,11 @@ import data.Storage;
 import engine.ControlTower;
 import engine.SimClock;
 import engine.TrafficGenerator;
+import exceptions.InvalidFlightPlanException;
 import exceptions.SkyControlException;
 import gui.MainWindow;
 import gui.Theme;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
@@ -19,8 +21,8 @@ import model.Airport;
 import policy.PriorityWithFuelPolicy;
 
 /**
- * Starts SkyControl: loads the schedule, opens the database, starts the clock thread
- * and opens the main window.
+ * Starts SkyControl: loads the schedule, opens the database, starts the clock thread and opens
+ * the main window. File > Open schedule closes the current run and starts a new one.
  *
  * Usage: java Main [schedule.csv]
  */
@@ -29,24 +31,37 @@ public class Main {
     private static final long TRAFFIC_SEED = 42;
     private static final double EXTRA_FLIGHTS_PER_MINUTE = 0.03;
 
+    private static Storage storage;
+
     public static void main(String[] args) {
         Path schedule = Paths.get(args.length > 0 ? args[0] : "data/schedule.csv");
         Theme.install();
-
-        ControlTower tower = new ControlTower(Airport.createDefault(), new PriorityWithFuelPolicy(),
-                new TrafficGenerator(TRAFFIC_SEED, EXTRA_FLIGHTS_PER_MINUTE));
+        storage = openStorage();
+        ControlTower tower;
         try {
-            List<ScheduledFlight> flights = new ScheduleLoader().load(schedule);
-            for (ScheduledFlight f : flights) {
-                tower.addFlight(f.arrival(), f.departure());
-            }
-            System.out.println("Loaded " + flights.size() + " scheduled arrivals from " + schedule);
+            tower = buildTower(schedule);
         } catch (Exception e) {
             fail("Could not load the flight schedule " + schedule + "\n\n" + e.getMessage());
             return;
         }
+        ControlTower first = tower;
+        SwingUtilities.invokeLater(() -> start(first));
+    }
 
-        Storage storage = openStorage();
+    /** Builds a control tower loaded with every flight in the schedule file. */
+    static ControlTower buildTower(Path schedule) throws IOException, InvalidFlightPlanException {
+        ControlTower tower = new ControlTower(Airport.createDefault(), new PriorityWithFuelPolicy(),
+                new TrafficGenerator(TRAFFIC_SEED, EXTRA_FLIGHTS_PER_MINUTE));
+        List<ScheduledFlight> flights = new ScheduleLoader().load(schedule);
+        for (ScheduledFlight f : flights) {
+            tower.addFlight(f.arrival(), f.departure());
+        }
+        System.out.println("Loaded " + flights.size() + " scheduled arrivals from " + schedule);
+        return tower;
+    }
+
+    /** Starts one run: database run record, background writer, clock thread and window. */
+    static void start(ControlTower tower) {
         int runId;
         try {
             runId = storage.startRun(tower.getPolicy().code());
@@ -57,30 +72,45 @@ public class Main {
         }
         AsyncStorageWriter writer = new AsyncStorageWriter(storage, runId);
         tower.addListener(writer);
-
         SimClock clock = new SimClock(tower);
         clock.setSpeed(2);
-
-        final Storage store = storage;
         final int run = runId;
-        Runnable onExit = () -> {
+
+        Runnable saveRun = () -> {
             clock.stop();
             writer.stop();
             try {
-                store.finishRun(run, tower.statistics());
+                storage.finishRun(run, tower.statistics());
             } catch (SkyControlException e) {
                 System.err.println(e.getMessage());
             }
-            store.close();
             System.out.println("Run " + run + " saved: " + tower.statistics());
-            System.exit(0);
         };
 
-        SwingUtilities.invokeLater(() -> {
-            MainWindow window = new MainWindow(tower, clock, store, onExit);
-            window.setVisible(true);
-            clock.start();
-        });
+        MainWindow[] window = new MainWindow[1];
+        window[0] = new MainWindow(tower, clock, storage,
+                () -> {
+                    saveRun.run();
+                    storage.close();
+                    System.exit(0);
+                },
+                newSchedule -> {
+                    ControlTower next;
+                    try {
+                        next = buildTower(newSchedule);
+                    } catch (Exception e) {
+                        JOptionPane.showMessageDialog(window[0],
+                                "Could not load " + newSchedule.getFileName() + "\n\n" + e.getMessage()
+                                        + "\n\nThe current simulation keeps running.",
+                                "Open schedule", JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+                    saveRun.run();
+                    window[0].closeWindow();
+                    start(next);
+                });
+        window[0].setVisible(true);
+        clock.start();
     }
 
     /** Uses SQLite if the driver is available, otherwise keeps runs in memory. */

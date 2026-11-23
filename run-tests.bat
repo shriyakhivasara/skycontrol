@@ -10,7 +10,7 @@ if errorlevel 1 (
     exit /b 1
 )
 set FAILED=0
-for %%T in (SchedulerTest SimulationTest DataTest ConcurrencyTest) do (
+for %%T in (SchedulerTest SimulationTest ControllerTest DataTest ConcurrencyTest) do (
     java -cp "out;lib/*" test.%%T
     if errorlevel 1 set FAILED=1
 )

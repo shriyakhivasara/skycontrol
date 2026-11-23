@@ -14,17 +14,51 @@ public class FlightTableModel extends AbstractTableModel {
     private static final String[] DEPARTURE_COLS =
             {"Sched", "Flight", "To", "Airline", "Aircraft", "Status", "Departed", "Delay", "Runway", "Gate"};
 
+    /** Choices for the status filter above each board. */
+    public static final String[] FILTERS = {"All flights", "Active", "In the air", "On the ground", "Finished", "Problems"};
+
     private final FlightType type;
     private List<FlightSnapshot> rows = new ArrayList<>();
+    private List<FlightSnapshot> lastAll = new ArrayList<>();
+    private String search = "";
+    private String filter = FILTERS[0];
 
     public FlightTableModel(FlightType type) {
         this.type = type;
     }
 
+    /** Sets the search text (flight number, airline or airport) and the status filter. */
+    public void setFilter(String searchText, String statusFilter) {
+        this.search = searchText == null ? "" : searchText.trim().toUpperCase();
+        this.filter = statusFilter == null ? FILTERS[0] : statusFilter;
+        setFlights(lastAll);
+    }
+
+    private boolean matches(FlightSnapshot f) {
+        if (!search.isEmpty() && !f.flightNumber().contains(search) && !f.airline().toUpperCase().contains(search)
+                && !f.otherAirport().contains(search) && !f.aircraftModel().contains(search)) {
+            return false;
+        }
+        model.FlightStatus s = f.status();
+        boolean finished = s.isFinished() || s == model.FlightStatus.LANDED;
+        switch (filter) {
+            case "Active": return !finished;
+            case "In the air": return s.isAirborne();
+            case "On the ground": return s == model.FlightStatus.AT_GATE || s == model.FlightStatus.REMOTE_STAND
+                    || s == model.FlightStatus.BOARDING || s == model.FlightStatus.READY_FOR_DEPARTURE;
+            case "Finished": return finished;
+            case "Problems": return s == model.FlightStatus.DIVERTED || s == model.FlightStatus.CANCELLED
+                    || s == model.FlightStatus.REMOTE_STAND || (s.isAirborne() && f.priority() != model.Priority.NORMAL)
+                    || f.delayMinutes() > 15;
+            default: return true;
+        }
+    }
+
     public void setFlights(List<FlightSnapshot> all) {
+        lastAll = all;
         List<FlightSnapshot> mine = new ArrayList<>();
         for (FlightSnapshot f : all) {
-            if (f.type() == type) {
+            if (f.type() == type && matches(f)) {
                 mine.add(f);
             }
         }

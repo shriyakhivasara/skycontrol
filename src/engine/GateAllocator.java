@@ -52,7 +52,41 @@ public class GateAllocator {
                 }
             }
         }
-        throw new GateUnavailableException(flight.getFlightNumber(), aircraft.requiredGateSize().name().toLowerCase());
+        throw GateUnavailableException.noFreeGate(flight.getFlightNumber(), aircraft.requiredGateSize().name().toLowerCase());
+    }
+
+    /**
+     * Moves a parked flight to a gate chosen by the controller.
+     * @throws GateUnavailableException if the gate is taken or too small
+     */
+    public synchronized Gate assignTo(Flight flight, String gateId) throws GateUnavailableException {
+        Gate target = null;
+        for (List<Gate> list : gatesBySize.values()) {
+            for (Gate g : list) {
+                if (g.getId().equalsIgnoreCase(gateId)) {
+                    target = g;
+                }
+            }
+        }
+        if (target == null) {
+            throw GateUnavailableException.cannotMove(flight.getFlightNumber(), gateId, "there is no such gate");
+        }
+        if (target.getOccupant() == flight) {
+            return target;
+        }
+        if (!target.getSize().fits(flight.getAircraft().requiredGateSize())) {
+            throw GateUnavailableException.cannotMove(flight.getFlightNumber(), target.getId(),
+                    "too small for a " + flight.getAircraft().getModel());
+        }
+        if (!target.isFree()) {
+            throw GateUnavailableException.cannotMove(flight.getFlightNumber(), target.getId(),
+                    "taken by " + target.getOccupant().getFlightNumber());
+        }
+        release(flight);
+        target.assign(flight);
+        gateOfFlight.put(flight.getFlightNumber(), target);
+        flight.setGateId(target.getId());
+        return target;
     }
 
     /** Frees the gate used by this flight, if it has one. */

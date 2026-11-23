@@ -47,10 +47,38 @@ public class RadarPanel extends JPanel implements Refreshable {
     }
 
     private TowerSnapshot snap;
+    /** Where each flight was drawn last time, so a click can find the nearest one. */
+    private final Map<String, double[]> drawn = new HashMap<>();
 
-    public RadarPanel() {
+    public RadarPanel(java.util.function.Consumer<String> openDetails) {
         setBackground(Theme.RADAR_BG);
         setPreferredSize(new Dimension(560, 560));
+        setToolTipText("Click an aircraft for details and actions");
+        addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                String hit = flightAt(e.getX(), e.getY());
+                if (hit != null) {
+                    openDetails.accept(hit);
+                }
+            }
+        });
+    }
+
+    /** The flight drawn closest to (x, y), if one is within 18 pixels. */
+    String flightAt(int x, int y) {
+        String best = null;
+        double bestDist = 18;
+        synchronized (drawn) {
+            for (Map.Entry<String, double[]> e : drawn.entrySet()) {
+                double d = Math.hypot(e.getValue()[0] - x, e.getValue()[1] - y);
+                if (d < bestDist) {
+                    bestDist = d;
+                    best = e.getKey();
+                }
+            }
+        }
+        return best;
     }
 
     @Override
@@ -92,6 +120,7 @@ public class RadarPanel extends JPanel implements Refreshable {
         long millis = System.currentTimeMillis();
         boolean blinkOn = (millis / 400) % 2 == 0;
         int holdingIndex = 0;
+        Map<String, double[]> positions = new HashMap<>();
         for (FlightSnapshot f : snap.flights()) {
             double[] pos = position(f, cx, cy, r, millis, holdingIndex);
             if (f.status() == FlightStatus.HOLDING) {
@@ -100,7 +129,21 @@ public class RadarPanel extends JPanel implements Refreshable {
             if (pos == null) {
                 continue;
             }
+            positions.put(f.flightNumber(), pos);
             drawAircraft(g, f, pos[0], pos[1], pos[2], blinkOn);
+        }
+        synchronized (drawn) {
+            drawn.clear();
+            drawn.putAll(positions);
+        }
+        if (snap.manualMode()) {
+            String banner = "MANUAL CONTROL    score " + snap.score();
+            g.setFont(Theme.BOLD);
+            int bw = g.getFontMetrics().stringWidth(banner) + 20;
+            g.setColor(new Color(0x713F12));
+            g.fillRoundRect(w / 2 - bw / 2, h - 46, bw, 22, 8, 8);
+            g.setColor(Theme.YELLOW);
+            g.drawString(banner, w / 2 - bw / 2 + 10, h - 30);
         }
         drawHeader(g, w);
         drawLegend(g, h);
@@ -117,7 +160,7 @@ public class RadarPanel extends JPanel implements Refreshable {
             case APPROACHING: {
                 brg = bearing(f.otherAirport()) + spread(f.flightNumber());
                 double minutesOut = Math.max(0, f.scheduledTime() - now);
-                dist = Math.max(0.3, Math.min(1.0, minutesOut / 30.0)) * r;
+                dist = (0.27 + 0.73 * Math.min(1.0, minutesOut / 30.0)) * r;
                 heading = brg + 180;
                 break;
             }
@@ -221,11 +264,11 @@ public class RadarPanel extends JPanel implements Refreshable {
         g.drawString(f.flightNumber(), (float) x + 10, (float) y - 2);
         g.setFont(Theme.SMALL);
         g.setColor(Theme.MUTED);
-        String sub = f.aircraftModel();
-        if (f.isArrival() && f.status().isAirborne()) {
-            sub += "  " + Math.round(f.fuelMinutes()) + "m fuel";
+        // show the fuel only where it matters, to keep a busy radar readable
+        if (f.isArrival() && f.status().isAirborne() && f.priority() != Priority.NORMAL) {
+            g.setColor(c);
+            g.drawString(Math.round(f.fuelMinutes()) + " min fuel", (float) x + 10, (float) y + 10);
         }
-        g.drawString(sub, (float) x + 10, (float) y + 10);
     }
 
     private void drawHeader(Graphics2D g, int w) {

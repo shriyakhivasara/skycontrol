@@ -16,7 +16,10 @@ public record TowerSnapshot(
         List<GateStatus> gates,
         List<FlightSnapshot> queue,
         List<LogEntry> log,
-        Statistics stats) {
+        Statistics stats,
+        boolean manualMode,
+        int score,
+        String scoreText) {
 
     public String clock() {
         return SimTime.format(Math.max(0, minute));

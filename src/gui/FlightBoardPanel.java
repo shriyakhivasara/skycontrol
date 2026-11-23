@@ -20,7 +20,7 @@ public class FlightBoardPanel extends JPanel implements Refreshable {
     private final JLabel summary = new JLabel(" ");
     private final FlightType type;
 
-    public FlightBoardPanel(FlightType type) {
+    public FlightBoardPanel(FlightType type, java.util.function.Consumer<String> openDetails) {
         super(new BorderLayout());
         this.type = type;
         this.model = new FlightTableModel(type);
@@ -40,6 +40,42 @@ public class FlightBoardPanel extends JPanel implements Refreshable {
             table.getColumnModel().getColumn(i).setPreferredWidth(widths[i]);
         }
         table.setDefaultRenderer(Object.class, new BoardRenderer());
+
+        table.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseClicked(java.awt.event.MouseEvent e) {
+                int row = table.rowAtPoint(e.getPoint());
+                if (e.getClickCount() == 2 && row >= 0) {
+                    openDetails.accept(model.getFlight(row).flightNumber());
+                }
+            }
+        });
+        table.setToolTipText("Double-click a flight for details and actions");
+
+        javax.swing.JTextField searchBox = new javax.swing.JTextField(14);
+        javax.swing.JComboBox<String> filterBox = new javax.swing.JComboBox<>(FlightTableModel.FILTERS);
+        Runnable apply = () -> model.setFilter(searchBox.getText(), (String) filterBox.getSelectedItem());
+        searchBox.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override public void insertUpdate(javax.swing.event.DocumentEvent e) { apply.run(); }
+            @Override public void removeUpdate(javax.swing.event.DocumentEvent e) { apply.run(); }
+            @Override public void changedUpdate(javax.swing.event.DocumentEvent e) { apply.run(); }
+        });
+        filterBox.addActionListener(e -> apply.run());
+        JPanel top = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 6, 4));
+        top.setBackground(Theme.PANEL);
+        JLabel sl = new JLabel("Search");
+        sl.setForeground(Theme.MUTED);
+        JLabel fl = new JLabel("Show");
+        fl.setForeground(Theme.MUTED);
+        JLabel tip = new JLabel("   Double-click a flight for details");
+        tip.setForeground(Theme.MUTED);
+        tip.setFont(Theme.SMALL);
+        top.add(sl);
+        top.add(searchBox);
+        top.add(fl);
+        top.add(filterBox);
+        top.add(tip);
+        add(top, BorderLayout.NORTH);
 
         JScrollPane scroll = new JScrollPane(table);
         scroll.getViewport().setBackground(Theme.BG);
@@ -62,8 +98,8 @@ public class FlightBoardPanel extends JPanel implements Refreshable {
                 done++;
             }
         }
-        summary.setText(total + (type == FlightType.ARRIVAL ? " arrivals, " + done + " landed or diverted"
-                : " departures, " + done + " departed or cancelled"));
+        summary.setText(total + (type == FlightType.ARRIVAL ? " arrivals shown, " + done + " landed or diverted"
+                : " departures shown, " + done + " departed or cancelled"));
     }
 
     /** Colours the status column and fades flights that have finished. */

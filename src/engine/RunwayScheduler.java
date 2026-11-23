@@ -54,6 +54,11 @@ public class RunwayScheduler {
         }
     }
 
+    /** True if the flight is waiting in the queue. */
+    public synchronized boolean contains(Flight flight) {
+        return queue.contains(flight);
+    }
+
     /** Removes a flight from the queue (for example when it diverts). */
     public synchronized boolean remove(Flight flight) {
         return queue.remove(flight);

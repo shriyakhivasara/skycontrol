@@ -7,11 +7,7 @@ import events.Events;
 import exceptions.SkyControlException;
 import java.awt.FlowLayout;
 import java.awt.GridLayout;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.DefaultComboBoxModel;
@@ -20,7 +16,6 @@ import javax.swing.JComboBox;
 import javax.swing.JLabel;
 import javax.swing.JPanel;
 import model.FlightSnapshot;
-import report.ReportExporter;
 
 /**
  * Buttons to throw events at the airport during the demo: MAYDAY, runway closures,
@@ -65,7 +60,7 @@ public class ControlPanel extends JPanel implements Refreshable {
 
         JButton storm = button("Thunderstorm", Theme.ACCENT);
         storm.addActionListener(e -> fire(Events.storm(10 * (stormFor.getSelectedIndex() + 1)), null));
-        JButton export = button("Export report (CSV)", Theme.TEXT);
+        JButton export = button("Export report...", Theme.TEXT);
         export.addActionListener(e -> export());
         add(row(new JLabel("Weather"), stormFor, storm, export));
 
@@ -89,13 +84,10 @@ public class ControlPanel extends JPanel implements Refreshable {
 
     private void export() {
         try {
-            String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(new Date());
-            Path dir = Paths.get("data", "exports");
-            ReportExporter ex = new ReportExporter();
-            ex.exportFlights(tower.flightSnapshots(), dir.resolve("flights_" + stamp + ".csv"));
-            ex.exportSummary(tower.statistics(), tower.getPolicy().code(), tower.getMinute(),
-                    dir.resolve("summary_" + stamp + ".csv"));
-            show("Saved flights_" + stamp + ".csv and summary_" + stamp + ".csv in data/exports", false);
+            String msg = ReportDialogs.exportReport(this, tower);
+            if (msg != null) {
+                show(msg, false);
+            }
         } catch (java.io.IOException ex) {
             show("Export failed: " + ex.getMessage(), true);
         }

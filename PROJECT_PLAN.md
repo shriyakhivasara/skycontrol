@@ -13,6 +13,7 @@ Air traffic control and airport operations simulator. Java OOP course project, t
 | 5. Data | `schedule.csv` loader, SQLite storage (JDBC), background writer thread, CSV reports | Done |
 | 6. Screens | Swing GUI: radar, arrivals and departures boards, runways and gates, statistics, event controls, tower log | Done |
 | 7. Integration and experiment | Run scripts, FCFS vs priority experiment on a thread pool, concurrency stress test, README, class guide, glossary | Done |
+| 8. User control | Manual control mode with safety checks and score, flight details window, flight plan form, search and filter, menus with file choosers | Done |
 
 ## Suggested split for the report and viva
 
@@ -29,6 +30,6 @@ Each person should be able to explain the whole system, but owns one area in dep
 3. OOP concept mapping (table in `README.md`)
 4. Experiment: FCFS vs priority (table in `README.md`, data in `data/exports/experiment_results.csv`)
 5. Screenshots (`docs/screenshots/`)
-6. Testing (176 checks in 4 suites)
+6. Testing (221 checks in 5 suites)
 7. Limitations and future work
 8. Glossary (`docs/GLOSSARY.md`)
